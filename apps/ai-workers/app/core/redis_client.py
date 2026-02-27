@@ -1,7 +1,5 @@
 import redis
-import json
-from config import settings
-from s3_client import download_resume, read_resume
+from app.core.config import settings
 
 client = redis.Redis(
     host=settings.VALKEY_HOST,

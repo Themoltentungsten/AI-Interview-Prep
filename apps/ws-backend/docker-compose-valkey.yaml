@@ -4,11 +4,30 @@ services:
     ports:
       - '6379:6379'
     environment:
-      # WARNING: ALLOW_EMPTY_PASSWORD is for development only.
-      # For production, use VALKEY_PASSWORD and bind to a specific interface.
       - ALLOW_EMPTY_PASSWORD=yes
     volumes:
       - 'valkey_data:/bitnami/valkey/data'
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+
+  neo4j:
+    image: neo4j:latest
+    container_name: neo4j
+    ports:
+      - "7474:7474"  # HTTP (Browser UI)
+      - "7687:7687"  # Bolt (driver connections)
+    environment:
+      - NEO4J_AUTH=neo4j/password  
+    volumes:
+      - ./neo4j_data:/data
+
 volumes:
   valkey_data:
     driver: local

@@ -10,5 +10,9 @@ class Settings:
     S3_BUCKET: str = os.getenv("AWS_S3_BUCKET_NAME", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     CDN_BASE_URL : str = os.getenv("CDN_BASE_URL", "")
+    NEO4J_URI : str = os.getenv("NEO4J_URI", "")
+    NEO4J_USERNAME : str = os.getenv("NEO4J_USERNAME", "")
+    NEO4J_PASSWORD : str = os.getenv("NEO4J_PASSWORD", "")
+    QDRANT_URI : str = os.getenv("QDRANT_URI", "")
 
 settings = Settings()

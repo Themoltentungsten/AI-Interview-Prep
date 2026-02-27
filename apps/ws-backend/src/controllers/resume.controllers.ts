@@ -20,14 +20,18 @@ export const resumeController = {
       }
 
       const job = {
-        type: "PROCESS_RESUME",
-        fileId,
-        userId,
-        S3fileName,
-        enqueuedAt: new Date(),
+        type: "resume_processing",
+        payload: {
+          user_id: userId,
+          file_id: fileId,
+          s3_file_name: S3fileName,
+        },
+        meta: {
+          enqueuedAt: new Date(),
+        },
       };
 
-      await redisClient.rpush("process_resume", JSON.stringify(job));
+      await redisClient.rpush("jobs", JSON.stringify(job));
 
       console.log("✅ Job pushed to queue");
 
