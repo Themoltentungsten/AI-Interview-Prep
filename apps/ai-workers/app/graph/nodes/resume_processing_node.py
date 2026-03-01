@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.graph.state.resume_processing_state import ResumeProcessState
 from app.workers.convert_pdf_to_image_worker import ocr_images_with_openai
 import fitz, json, re, uuid
-
+from app.core.redis_client import client
 # =========================
 # Models & Clients
 # =========================
@@ -145,7 +145,9 @@ INSTRUCTIONS:
 - Return ONLY a valid JSON object. No explanation, no markdown, no backticks.
 - If a section does not exist in the resume, return an empty list [] for that key.
 - Always return all 5 keys: skills, work_experience, education, projects, extracurricular.
-- For skills: extract EVERYTHING from "Coursework / Skills", "Technical Skills", or any section listing technologies, languages, tools, frameworks, or concepts.
+- For 
+
+kills: extract EVERYTHING from "Coursework / Skills", "Technical Skills", or any section listing technologies, languages, tools, frameworks, or concepts.
 - Do not skip tools like Git, GitHub, VS Code, or AI frameworks like LangChain, LangGraph.
 - For work_experience: if no formal jobs exist, return [].
 - Do not merge separate entries. Each project, role, or activity is its own object.
@@ -387,7 +389,7 @@ def store_qdrant_node(state: ResumeProcessState):
         file_id       = state.get("file_id", str(uuid.uuid4()))
         user_id       = state.get("user_id", "unknown")
         neo4j_node_id = state.get("neo4j_node_id", None)
-
+        print(f"The length of chunks and embeddings are:",len(chunks),len(embeddings))
         if len(chunks) != len(embeddings):
             return {"error": f"Chunk/embedding mismatch: {len(chunks)} vs {len(embeddings)}"}
 
@@ -425,4 +427,31 @@ def store_qdrant_node(state: ResumeProcessState):
         print("Qdrant node error:", str(e))
         return {"error": str(e)}
 
+def merge_node(state: ResumeProcessState) -> ResumeProcessState:
+    return state 
 
+def store_neon_node(state: ResumeProcessState):
+    print("Storing in neon node started.")
+    payload = {
+        "user_id":       state.get("user_id"),
+        "file_id":       state.get("file_id"),
+        "s3_file_name":  state.get("s3_file_name"),
+        "neo4j_node_id":    state.get("neo4j_node_id"),
+        "qdrant_point_ids": state.get("qdrant_point_ids"),
+        "stored_in_neo4j":  state.get("stored_in_neo4j"),
+        "stored_in_qdrant": state.get("stored_in_qdrant"),
+        "skills":          state.get("skills"),
+        "work_experience": state.get("work_experience"),
+        "education":       state.get("education"),
+        "projects":        state.get("projects"),
+        "extracurricular": state.get("extracurricular"),
+        "error": state.get("error"),
+    }
+    
+    message = {
+        "event_type": "neon.store",
+        "payload": payload
+    }
+    
+    client.publish("resume:processed", json.dumps(message))
+    return {"stored_in_neon": True}

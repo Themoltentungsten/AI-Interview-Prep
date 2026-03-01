@@ -62,6 +62,7 @@ class ResumeProcessState(TypedDict):
     stored_in_neo4j: Annotated[Optional[bool], keep_last]
     stored_in_neon:  Annotated[Optional[bool], keep_last]
     stored_in_qdrant: Annotated[Optional[bool], keep_last]
+    stored_in_neon: Annotated[Optional[bool], keep_last]
 
     # ── Error ──
     # Also Annotated so both branches can write errors without conflict

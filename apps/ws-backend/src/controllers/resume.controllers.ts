@@ -44,7 +44,7 @@ export const resumeController = {
     }
   },
 
-  uploadResume: async (req: AuthenticatedRequest, res: Response) => {
+  storeResume: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const session = req.session;
 
@@ -55,8 +55,9 @@ export const resumeController = {
       const userId = session.user.id;
 
       // Upload logic here
-
-      return res.status(200).json({ message: "Resume uploaded" });
+      const params = req.body
+      console.log(params)
+      return res.status(200).json({ message: "Resume Data uploaded" });
     } catch (error) {
       console.error("Error uploading resume:", error);
       return res.status(500).json({ message: "Failed to upload resume" });

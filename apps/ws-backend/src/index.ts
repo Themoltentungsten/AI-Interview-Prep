@@ -1,3 +1,5 @@
+// Load env FIRST
+dotenv.config({ override: true });
 // apps/ws-backend/src/index.ts (COMPLETE & FINAL)
 import express from "express";
 import cors from "cors";
@@ -10,9 +12,7 @@ import {  errorMiddleware } from "./middlewares/error.middlewares.js";
 import { auth } from "@repo/auth/server";
 import {  toNodeHandler } from "better-auth/node";
 import { prisma } from "@repo/db/prisma-db";
-
-// Load env FIRST
-dotenv.config({ override: true });
+import "./workers/processResume.workers.js"
 
 const app: express.Application = express();
 const server = http.createServer(app);

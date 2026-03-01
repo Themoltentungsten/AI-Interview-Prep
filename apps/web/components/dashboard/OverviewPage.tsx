@@ -1,5 +1,7 @@
 "use client";
 
+import { authClient } from "@repo/auth/client";
+import { redirect } from "next/navigation";
 import { useRef, useState } from "react";
 
 const stats = [
@@ -26,10 +28,10 @@ const skillRadar = [
 ];
 
 const quickStart = [
-  { id: "sd",  icon: "⬡", label: "System Design", desc: "Architecture & scalability",   tag: "Popular",   tagClass: "tag-accent" },
-  { id: "dsa", icon: "◈", label: "DSA / Coding",  desc: "Algorithms & data structures", tag: "Daily",     tagClass: "tag-gold" },
-  { id: "beh", icon: "◎", label: "Behavioral",    desc: "STAR method coaching",          tag: "Suggested", tagClass: "tag-violet" },
-  { id: "sql", icon: "⬕", label: "SQL & Databases",desc: "Queries, indexes, design",    tag: "Weak area", tagClass: "tag-rose" },
+  { id: "sd", icon: "⬡", label: "System Design", desc: "Architecture & scalability", tag: "Popular", tagClass: "tag-accent" },
+  { id: "dsa", icon: "◈", label: "DSA / Coding", desc: "Algorithms & data structures", tag: "Daily", tagClass: "tag-gold" },
+  { id: "beh", icon: "◎", label: "Behavioral", desc: "STAR method coaching", tag: "Suggested", tagClass: "tag-violet" },
+  { id: "sql", icon: "⬕", label: "SQL & Databases", desc: "Queries, indexes, design", tag: "Weak area", tagClass: "tag-rose" },
 ];
 
 function scoreClass(status: string) {
@@ -68,7 +70,13 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
   const [activeTab, setActiveTab] = useState<"overview" | "sessions" | "skills">("overview");
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    await authClient.signOut()
+    redirect("/login")
+  }
   return (
     <>
       {/* ── Top bar ── */}
@@ -81,6 +89,13 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
         </div>
         <div className="topbar-actions">
           <button className="btn-new-session">+ New Interview</button>
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="btn-new-session bg-red-600! hover:bg-red-700!"
+          >
+            {isLoggingOut ? "Logging out…" : "Logout"}
+          </button>
         </div>
       </div>
 

@@ -1,4 +1,3 @@
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
@@ -29,7 +28,7 @@ model User {
   interviews Interview[]
   skills     UserSkill[]
   files      File[]
-
+  resumes    Resume[]
 
   @@unique([email])
   @@map("user")
@@ -107,7 +106,6 @@ enum InterviewType {
 enum FileStatus {
   STARTING
   UPLOADED
-  PROCESSING
   PROCESSED
   FAILED
 }
@@ -118,16 +116,14 @@ enum Difficulty {
   HARD
 }
 
-
-
-
 // SKILLS
 
 model Skill {
-  id   String @id @default(uuid())
-  name String @unique
+  id       String      @id @default(uuid())
+  name     String      @unique
+  category String?
 
-  users UserSkill[]
+  users    UserSkill[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -244,10 +240,11 @@ model Evaluation {
   responseId String   @unique
   response   Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
 
-  overallScore Int?
-  clarity      Int?
-  technical    Int?
-  confidence   Int?
+  overallScore    Int?
+  clarity         Int?
+  technical       Int?
+  confidence      Int? // ← existing field
+  confidenceScore Float? // ← ADD THIS (0.0 – 1.0 or 0–100)
 
   feedback     String?
   strengths    String?
@@ -271,9 +268,98 @@ model File {
   S3FileName       String
   status           FileStatus @default(STARTING)
 
+  resumes   Resume?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@map("file")
+}
+
+model Resume {
+  id             String   @id @default(uuid())
+  userId         String
+  fileId         String   @unique
+  neo4jNodeId    String?
+  qdrantPointIds String[] @default([]) // postgres array
+  storedInNeo4j  Boolean  @default(false)
+  storedInQdrant Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  workExperience  WorkExperience[]
+  education       Education[]
+  projects        Project[]
+  extracurricular Extracurricular[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+@@unique([userId])
+  @@index([userId])
+  @@map("resume")
+}
+
+model Extracurricular {
+  id       String @id @default(uuid())
+  resumeId String
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  title        String
+  organization String?
+  duration     String?
+  description  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([resumeId])
+  @@map("extracurricular")
+}
+
+model Project {
+  id       String @id @default(uuid())
+  resumeId String
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  title       String
+  techStack   String[] // postgres array
+  description String?
+
+  createdAt DateTime @default(now())
+
+  @@index([resumeId])
+  @@map("project")
+}
+
+model Education {
+  id       String @id @default(uuid())
+  resumeId String
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  institution String
+  degree      String
+  duration    String?
+  grade       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([resumeId])
+  @@map("education")
+}
+
+model WorkExperience {
+  id       String @id @default(uuid())
+  resumeId String
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  company     String?
+  role        String?
+  duration    String?
+  description String?
+
+  createdAt DateTime @default(now())
+
+  @@index([resumeId])
+  @@map("work_experience")
 }
