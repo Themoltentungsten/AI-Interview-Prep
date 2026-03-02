@@ -72,7 +72,7 @@ function WaveBars({ active }: { active: boolean }) {
 
 // ── Main component ─────────────────────────────────────────
 export default function InterviewPage() {
-  const router = useRouter()
+  const router = useRouter();
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [micOn, setMicOn] = useState(true);
@@ -83,8 +83,8 @@ export default function InterviewPage() {
   const timer = useTimer(sessionRunning);
   const userVideoRef = useRef<HTMLVideoElement>(null);
   const aiAudioRef = useRef<HTMLAudioElement>(null);
-  const [micPermission, setMicPermission] = useState(false)
-  const [camPermission, setCamPermission] = useState(false)
+  const [micPermission, setMicPermission] = useState(false);
+  const [camPermission, setCamPermission] = useState(false);
   const userStreamRef = useRef<MediaStream | null>(null);
   const reviewRecorderRef = useRef<MediaRecorder | null>(null);
   const cleanRecorderRef = useRef<MediaRecorder | null>(null);
@@ -92,9 +92,27 @@ export default function InterviewPage() {
   const cleanChunksRef = useRef<BlobPart[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const isRecordingRef = useRef(false);
-  const { transcript, isListening, startListening, stopListening } = useSpeechToText();
 
-  // ✅ FIXED: Capture stream reference
+  const { transcript, isListening, startListening, stopListening } =
+    useSpeechToText((finalText) => {
+      if (!finalText.trim()) return;
+      const now = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now(), role: "user", text: finalText, time: now },
+      ]);
+    });
+
+  // ── Stable refs for start/stop to avoid infinite effect loops ──
+  const startListeningRef = useRef(startListening);
+  const stopListeningRef = useRef(stopListening);
+  useEffect(() => { startListeningRef.current = startListening; }, [startListening]);
+  useEffect(() => { stopListeningRef.current = stopListening; }, [stopListening]);
+
+  // ── 1. Single getUserMedia call ──────────────────────────────
   useEffect(() => {
     const requestMediaAccess = async () => {
       try {
@@ -102,26 +120,45 @@ export default function InterviewPage() {
           video: { facingMode: "user" },
           audio: true,
         });
-
         userStreamRef.current = stream;
         setMicPermission(true);
         setCamPermission(true);
-
       } catch (err) {
         console.error("Permission denied ❌", err);
       }
     };
-
     requestMediaAccess();
+
+    return () => {
+      userStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
   }, []);
 
+  // ── 2. Attach stream to video element ───────────────────────
   useEffect(() => {
     if (userVideoRef.current && userStreamRef.current) {
       userVideoRef.current.srcObject = userStreamRef.current;
     }
   }, [micPermission, camOn]);
 
-  // ✅ FIXED: Proper recording with guard
+  // ── 3. Mirror transcript into text input ────────────────────
+  useEffect(() => {
+    if (transcript) setInput(transcript);
+  }, [transcript]);
+
+  // ── 4. Single mic-management effect (no duplicate) ──────────
+  useEffect(() => {
+    if (micOn && !aiSpeaking) {
+      startListeningRef.current();
+    } else {
+      stopListeningRef.current();
+    }
+    return () => {
+      stopListeningRef.current();
+    };
+  }, [micOn, aiSpeaking]);
+
+  // ── 5. Recording ─────────────────────────────────────────────
   const startRecording = useCallback(() => {
     if (!userStreamRef.current || isRecordingRef.current) return;
 
@@ -132,35 +169,31 @@ export default function InterviewPage() {
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
 
-      // 🎤 User mic source
       const userMicSource = audioContext.createMediaStreamSource(stream);
 
-      // 🤖 AI audio source (VERY IMPORTANT)
       let aiSource: MediaElementAudioSourceNode | null = null;
-
       if (aiAudioRef.current) {
         aiSource = audioContext.createMediaElementSource(aiAudioRef.current);
       }
 
       const mixedDestination = audioContext.createMediaStreamDestination();
 
-      // Connect user mic
+      // ✅ User mic → recording only (prevents echo in ears)
       userMicSource.connect(mixedDestination);
 
-      // Connect AI audio if exists
+      // ✅ AI audio → recording + speakers (user must hear AI)
       if (aiSource) {
-        aiSource.connect(mixedDestination);
+        aiSource.connect(mixedDestination);         // into recording
+        aiSource.connect(audioContext.destination); // into speakers
       }
 
-      // Optional: allow hearing audio normally
-      userMicSource.connect(audioContext.destination);
-      if (aiSource) aiSource.connect(audioContext.destination);
-
+      // ✅ Final video has: user video + user mic + AI audio
       const reviewVideoStream = new MediaStream([
         ...stream.getVideoTracks(),
         ...mixedDestination.stream.getAudioTracks(),
       ]);
 
+      // ✅ Clean audio = user mic only (for STT / analysis)
       const cleanAudioStream = new MediaStream(stream.getAudioTracks());
 
       const reviewRecorder = new MediaRecorder(reviewVideoStream);
@@ -174,7 +207,6 @@ export default function InterviewPage() {
       reviewRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) reviewChunksRef.current.push(e.data);
       };
-
       cleanRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) cleanChunksRef.current.push(e.data);
       };
@@ -196,21 +228,17 @@ export default function InterviewPage() {
 
       reviewRecorder.start();
       cleanRecorder.start();
-
     } catch (error) {
       console.error("Recording failed:", error);
       isRecordingRef.current = false;
     }
   }, []);
 
-  // ✅ FIXED: Proper stop recording
   const stopRecording = useCallback(() => {
     if (!isRecordingRef.current) return;
-
     reviewRecorderRef.current?.stop();
     cleanRecorderRef.current?.stop();
     isRecordingRef.current = false;
-
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
@@ -223,16 +251,23 @@ export default function InterviewPage() {
     }
   }, [micPermission, camPermission, startRecording]);
 
-  // Auto-scroll chat
+  // ── 6. Auto-scroll ───────────────────────────────────────────
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ── 7. Send message ──────────────────────────────────────────
   const sendMessage = () => {
     const text = input.trim();
     if (!text) return;
-    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setMessages((prev) => [...prev, { id: Date.now(), role: "user", text, time: now }]);
+    const now = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    setMessages((prev) => [
+      ...prev,
+      { id: Date.now(), role: "user", text, time: now },
+    ]);
     setInput("");
 
     setAiSpeaking(true);
@@ -243,7 +278,10 @@ export default function InterviewPage() {
           id: Date.now() + 1,
           role: "ai",
           text: "That's a solid point. Now let's talk about the database schema. How would you store the mappings, and which database type would you choose?",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
         },
       ]);
       setAiSpeaking(false);
@@ -260,13 +298,14 @@ export default function InterviewPage() {
   return (
     <>
       <div className="noise" />
-
       <div className="interview-root">
 
         {/* ════ TOP BAR ════ */}
         <header className="interview-topbar">
           <div className="topbar-left">
-            <Link href="/dashboard" className="topbar-logo">Interview<span>AI</span></Link>
+            <Link href="/dashboard" className="topbar-logo">
+              Interview<span>AI</span>
+            </Link>
             <div className="topbar-divider" />
             <div className="topbar-session-info">
               <span className="tag tag-accent">System Design</span>
@@ -289,27 +328,30 @@ export default function InterviewPage() {
               <span className="score-preview-label">Score</span>
               <span className="score-preview-value score-high">78</span>
             </div>
-            <button className="btn-end-session"
+            <button
+              className="btn-end-session"
               onClick={() => {
                 setSessionRunning(false);
                 stopRecording();
-              }}>End Session</button>
+              }}
+            >
+              End Session
+            </button>
           </div>
         </header>
 
         {/* ════ BODY ════ */}
         <div className="interview-body">
 
-          {/* ── Video area (left 2/3) ── */}
+          {/* ── Video area ── */}
           <div className="video-area">
 
-            {/* AI interviewer — large */}
             <div className={`vid-card vid-ai${aiSpeaking ? " speaking" : ""}`}>
               <div className="vid-inner">
                 <div className="vid-placeholder vid-placeholder-ai">
                   <div className="vid-avatar-ring">
                     <div className="vid-avatar">
-                      <audio ref={aiAudioRef}></audio>
+                      <audio ref={aiAudioRef} />
                     </div>
                   </div>
                   <div className="vid-circuit">
@@ -318,7 +360,6 @@ export default function InterviewPage() {
                     ))}
                   </div>
                 </div>
-
                 <div className="vid-speaking-bar">
                   <WaveBars active={aiSpeaking} />
                   <span className="vid-speaking-label">
@@ -326,7 +367,6 @@ export default function InterviewPage() {
                   </span>
                 </div>
               </div>
-
               <div className="vid-nametag">
                 <span className="dot-accent-static" />
                 <span className="vid-name">PrepAI Interviewer</span>
@@ -334,20 +374,13 @@ export default function InterviewPage() {
               </div>
             </div>
 
-            {/* ✅ FIXED: Proper video structure */}
             <div className={`vid-card vid-user${!camOn ? " cam-off" : ""}`}>
               <div className="vid-inner">
                 {camOn && micPermission ? (
                   <div className="vid-placeholder vid-placeholder-user">
                     <div className="vid-avatar-user">
-                      <video
-                        ref={userVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                      />
+                      <video ref={userVideoRef} autoPlay muted playsInline />
                     </div>
-                    {/* Bokeh dots - behind video */}
                     {[...Array(8)].map((_, i) => (
                       <div
                         key={i}
@@ -356,7 +389,7 @@ export default function InterviewPage() {
                           left: `${10 + i * 11}%`,
                           top: `${20 + (i % 3) * 25}%`,
                           animationDelay: `${i * 0.3}s`,
-                          zIndex: 0
+                          zIndex: 0,
                         }}
                       />
                     ))}
@@ -370,7 +403,6 @@ export default function InterviewPage() {
                   </div>
                 )}
               </div>
-
               <div className="vid-nametag">
                 <span className="dot-accent-static dot-user" />
                 <span className="vid-name">Alex Rivera</span>
@@ -378,20 +410,11 @@ export default function InterviewPage() {
               </div>
             </div>
 
-
             {/* ── Controls bar ── */}
             <div className="controls-bar">
               <button
                 className={`ctrl-btn${!micOn ? " ctrl-off" : ""}`}
-                onClick={() => {
-                  setMicOn((v) => !v);
-                  if (micOn) {
-                    startListening(); // Start transcription when mic ON
-                    console.log(transcript.trim())
-                  } else {
-                    stopListening();  // Stop when mic OFF
-                  }
-                }}
+                onClick={() => setMicOn((prev) => !prev)}
                 title={micOn ? "Mute mic" : "Unmute mic"}
               >
                 {micOn ? (
@@ -435,7 +458,7 @@ export default function InterviewPage() {
             </div>
           </div>
 
-          {/* ── Chat panel (right 1/3) ── */}
+          {/* ── Chat panel ── */}
           <aside className="chat-panel">
             <div className="chat-header">
               <div className="chat-header-left">
@@ -503,7 +526,7 @@ export default function InterviewPage() {
             </div>
           </aside>
         </div>
-      </div>
+      </div>  
     </>
   );
 }

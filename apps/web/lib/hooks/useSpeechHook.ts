@@ -5,22 +5,21 @@ declare global {
         webkitSpeechRecognition: any;
     }
 }
-
 type SpeechRecognitionEvent = {
     results: SpeechRecognitionResultList;
     resultIndex: number;
 };
 
-
-export const useSpeechToText = () => {
+export const useSpeechToText = (onFinalMessage?: (text: string) => void) => {
     const [transcript, setTranscript] = useState("");
     const [isListening, setIsListening] = useState(false);
+
     const recognitionRef = useRef<any>(null);
+    const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const startListening = useCallback(() => {
         const SpeechRecognition =
-            window.SpeechRecognition ||
-            (window as any).webkitSpeechRecognition;
+            window.SpeechRecognition || (window as any).webkitSpeechRecognition;
 
         if (!SpeechRecognition) {
             console.error("Speech Recognition not supported");
@@ -37,25 +36,32 @@ export const useSpeechToText = () => {
         };
 
         recognition.onresult = (event: any) => {
-            let interim = "";
             let finalChunk = "";
 
             for (let i = event.resultIndex; i < event.results.length; i++) {
-                const result = event.results[i][0];
                 if (event.results[i].isFinal) {
-                    finalChunk += result.transcript + " ";
-                } else {
-                    interim += result.transcript;
+                    finalChunk += event.results[i][0].transcript + " ";
                 }
             }
 
             if (finalChunk) {
                 setTranscript(prev => prev + finalChunk);
+
+                // 🟢 Reset silence timer
+                if (silenceTimerRef.current) {
+                    clearTimeout(silenceTimerRef.current);
+                }
+
+                silenceTimerRef.current = setTimeout(() => {
+                    if (onFinalMessage) {
+                        onFinalMessage(finalChunk.trim());
+                    }
+                    setTranscript(""); // reset after sending
+                }, 2500); // ⏳ 2.5 sec silence
             }
         };
 
-        recognition.onerror = (event: any) => {
-            console.error("Speech recognition error:", event.error);
+        recognition.onerror = () => {
             setIsListening(false);
         };
 
@@ -65,7 +71,7 @@ export const useSpeechToText = () => {
 
         recognitionRef.current = recognition;
         recognition.start();
-    }, []);
+    }, [onFinalMessage]);
 
     const stopListening = useCallback(() => {
         recognitionRef.current?.stop();
