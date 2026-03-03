@@ -3,6 +3,7 @@
 import { authClient } from "@repo/auth/client";
 import { redirect } from "next/navigation";
 import React, { useRef, useState } from "react";
+import CustomSessionModal from "./dashboard-components/pages/CustomSessionModal";
 
 const stats = [
   { label: "Sessions Done", value: "24", unit: "total", dot: "dot-accent", delta: "+3 this week" },
@@ -67,6 +68,7 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
   streak: number;
   onNavigate: (page: string) => void;
 }) {
+    const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "sessions" | "skills">("overview");
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
@@ -80,7 +82,7 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
 
   const handleNewInterview = async (e:React.FormEvent) => {
     e.preventDefault()
-    redirect(`/interview/sdlf;kjd`)
+    setModalOpen(true)
   }
   return (
     <>
@@ -228,6 +230,7 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
           </div>
         </div>
       )}
+      <CustomSessionModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </>
   );
 }

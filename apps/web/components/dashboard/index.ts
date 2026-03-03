@@ -6,4 +6,5 @@ export { default as ProgressPage }   from "./dashboard-components/pages/Progress
 export { default as ResumePage }     from "./dashboard-components/pages/ResumePage";
 export { default as SkillsPage }     from "./dashboard-components/pages/SkillsPage";
 export { default as WaitingRoom }     from "./dashboard-components/pages/WaitingRoom";
+export {default as CustomSessionModal} from "./dashboard-components/pages/CustomSessionModal"
 export { default as OverviewPage }   from "./OverviewPage";

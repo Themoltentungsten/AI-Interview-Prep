@@ -5,12 +5,21 @@ import CustomSessionModal from "./CustomSessionModal";
 import { redirect } from "next/navigation";
 
 const interviewTypes = [
-  { icon: "⬡", name: "System Design", desc: "Practice designing scalable systems — URL shorteners, rate limiters, chat apps and more.", tag: "Popular", tagClass: "tag-accent", count: "12 sessions done" },
-  { icon: "◈", name: "DSA / Coding", desc: "Arrays, trees, graphs, DP — full algorithm practice with explanations.", tag: "Daily", tagClass: "tag-gold", count: "8 sessions done" },
-  { icon: "◎", name: "Behavioral", desc: "STAR-method coaching for leadership, conflict, and culture-fit questions.", tag: "Suggested", tagClass: "tag-violet", count: "4 sessions done" },
-  { icon: "⬕", name: "SQL & Databases", desc: "Query writing, indexing strategies, normalization and schema design.", tag: "Weak area", tagClass: "tag-rose", count: "2 sessions done" },
-  { icon: "◉", name: "OS & Concurrency", desc: "Processes, threads, locks, scheduling and memory management.", tag: "New", tagClass: "tag-sky", count: "0 sessions done" },
-  { icon: "◌", name: "Networking", desc: "HTTP, TCP/IP, DNS, WebSockets — how the internet works under the hood.", tag: "New", tagClass: "tag-sky", count: "1 session done" },
+  { icon: "⬡", name: "System Design",      desc: "Scalable systems — URL shorteners, rate limiters, chat apps.",        tag: "Popular",   tagClass: "tag-accent",  count: "12 sessions done" },
+  { icon: "◈", name: "DSA / Coding",        desc: "Arrays, trees, graphs, DP — full algorithm practice.",                tag: "Daily",     tagClass: "tag-gold",    count: "8 sessions done"  },
+  { icon: "◎", name: "Behavioral",          desc: "STAR-method for leadership, conflict, and culture-fit questions.",    tag: "Suggested", tagClass: "tag-violet",  count: "4 sessions done"  },
+  { icon: "⬕", name: "SQL & Databases",     desc: "Query writing, indexing, normalization and schema design.",           tag: "Weak area", tagClass: "tag-rose",    count: "2 sessions done"  },
+  { icon: "◉", name: "OS & Concurrency",    desc: "Processes, threads, locks, scheduling, memory management.",           tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  { icon: "◌", name: "Networking",          desc: "HTTP, TCP/IP, DNS, WebSockets — how the internet works.",             tag: "New",       tagClass: "tag-sky",     count: "1 session done"   },
+  { icon: "◧", name: "Frontend",            desc: "DOM, event loop, React internals, performance, accessibility.",       tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  { icon: "◨", name: "Backend & APIs",      desc: "REST, GraphQL, auth, rate limiting, API design patterns.",            tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  { icon: "◩", name: "DevOps & Cloud",      desc: "CI/CD, Docker, Kubernetes, AWS basics, deployment pipelines.",        tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  { icon: "◪", name: "Machine Coding",      desc: "Build a working feature in 60–90 min — LLD and clean code focus.",   tag: "Popular",   tagClass: "tag-accent",  count: "3 sessions done"  },
+  { icon: "◫", name: "HR Round",            desc: "Salary negotiation, career goals, strengths and weaknesses.",         tag: "Easy win",  tagClass: "tag-gold",    count: "1 session done"   },
+  { icon: "◬", name: "Product Sense",       desc: "Design a product, metrics, trade-offs — for PM-facing engineers.",   tag: "Advanced",  tagClass: "tag-violet",  count: "0 sessions done"  },
+  { icon: "◭", name: "Security Basics",     desc: "XSS, CSRF, SQL injection, HTTPS, OAuth — common security concepts.", tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  { icon: "◮", name: "Data Engineering",    desc: "Pipelines, ETL, Spark, Kafka, warehousing basics.",                  tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  { icon: "◯", name: "Generative AI",    desc: "RAG, LLMs, Embeddings, Vector Databases.",                  tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
 ];
 
 const upcomingSessions = [

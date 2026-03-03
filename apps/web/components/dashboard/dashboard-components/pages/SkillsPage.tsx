@@ -1,22 +1,48 @@
 "use client";
+import { useEffect, useState } from "react";
 
-const skillRadar = [
-  { skill: "System Design", score: 84, sessions: 12, trend: "+5" },
-  { skill: "Data Structures", score: 68, sessions: 8, trend: "+3" },
-  { skill: "Behavioral", score: 75, sessions: 4, trend: "+8" },
-  { skill: "SQL & Databases", score: 55, sessions: 2, trend: "-2" },
-  { skill: "OS Concepts", score: 48, sessions: 1, trend: "—" },
-  { skill: "Networking", score: 61, sessions: 3, trend: "+1" },
-];
-
-function scoreClass(score: number) {
-  return score >= 75 ? "score-high" : score >= 60 ? "score-medium" : "score-low";
-}
-function barClass(score: number) {
-  return `bar-fill ${scoreClass(score)}`;
-}
+type Skill = {
+  id: string;
+  name: string;
+  category?: string;
+};
 
 export default function SkillsPage() {
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSkills = async () => {
+      try {
+        const res = await fetch("/api/get-skills");
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch skills");
+        }
+
+        const data = await res.json();
+        const normalized: Skill[] = Array.isArray(data.data)
+          ? data.data.map((entry: any) => entry.skill)
+          : [];
+        setSkills(normalized);
+      } catch (err) {
+        console.error("Error fetching skills:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSkills();
+  }, []);
+
+  // Group skills by category
+  const grouped = skills.reduce<Record<string, Skill[]>>((acc, skill) => {
+    const cat = skill.category ?? "Other";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(skill);
+    return acc;
+  }, {});
+
   return (
     <>
       {/* Top bar */}
@@ -49,57 +75,90 @@ export default function SkillsPage() {
         </div>
       </div>
 
-      {/* Skill breakdown */}
+      {/* Skill breakdown grouped by category */}
       <div className="panel">
         <div className="panel-header">
-          <div><div className="panel-title">All Skills</div><div className="panel-sub">Based on your sessions</div></div>
+          <div>
+            <div className="panel-title">All Skills</div>
+            <div className="panel-sub">Based on your sessions</div>
+          </div>
         </div>
+
         <div className="skill-list skill-list-lg">
-          {skillRadar.map((s, i) => {
-            const st = s.score >= 75 ? "high" : s.score >= 60 ? "medium" : "low";
-            return (
-              <div key={s.skill} className="skill-row" style={{ animationDelay: `${i * 0.07}s` }}>
-                <div className="skill-row-top">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <span className="skill-name">{s.skill}</span>
-                    <span style={{ fontFamily: "var(--ff-mono)", fontSize: "0.65rem", color: s.trend.startsWith("+") ? "var(--positive)" : s.trend.startsWith("-") ? "var(--rose)" : "var(--muted)" }}>
-                      {s.trend}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                    <span className={`tag ${st === "high" ? "tag-gold" : st === "medium" ? "tag-amber" : "tag-rose"}`}>
-                      {st === "high" ? "Strong" : st === "medium" ? "Good" : "Needs work"}
-                    </span>
-                    <span className={`skill-score ${scoreClass(s.score)}`}>{s.score}/100</span>
-                  </div>
-                </div>
-                <div className="bar-track bar-track-lg">
-                  <div className={barClass(s.score)} style={{ width: `${s.score}%` }} />
-                </div>
-                <div className="skill-hint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>
-                    {st === "low" ? "🎯 Recommended: 2 sessions this week" : st === "medium" ? "📈 Keep practicing to reach Strong" : "✅ Maintain with 1 session/week"}
+          {loading ? (
+            <div style={{ color: "var(--text-2)", fontSize: "0.85rem" }}>Loading skills…</div>
+          ) : skills.length > 0 ? (
+            Object.entries(grouped).map(([category, categorySkills], gi) => (
+              <div key={category} style={{ marginBottom: "1.5rem" }}>
+                {/* Category heading */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.6rem",
+                  marginBottom: "0.6rem",
+                }}>
+                  <span style={{
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    color: "var(--text-2)",
+                  }}>
+                    {category}
                   </span>
-                  <span style={{ fontFamily: "var(--ff-mono)", fontSize: "0.65rem", color: "var(--muted)" }}>
-                    {s.sessions} session{s.sessions !== 1 ? "s" : ""} done
+                  <span style={{
+                    fontSize: "0.7rem",
+                    color: "var(--text-3, var(--text-2))",
+                    background: "var(--surface-2, rgba(255,255,255,0.06))",
+                    borderRadius: "999px",
+                    padding: "0.1rem 0.5rem",
+                  }}>
+                    {categorySkills.length}
                   </span>
+                  <div style={{ flex: 1, height: "1px", background: "var(--border, rgba(255,255,255,0.08))" }} />
+                </div>
+
+                {/* Skills as chips */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  {categorySkills.map((s) => (
+                    <span
+                      key={s.id}
+                      className="skill-name"
+                      style={{
+                        padding: "0.35rem 0.8rem",
+                        borderRadius: "999px",
+                        fontSize: "0.8rem",
+                        border: "1px solid var(--border, rgba(255,255,255,0.1))",
+                        background: "var(--surface-2, rgba(255,255,255,0.04))",
+                        color: "var(--text-1)",
+                      }}
+                    >
+                      {s.name}
+                    </span>
+                  ))}
                 </div>
               </div>
-            );
-          })}
+            ))
+          ) : (
+            <div style={{ color: "var(--text-2)", fontSize: "0.85rem" }}>
+              No skills right now — try enhancing your resume.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Recommendation panel */}
+      {/* Recommendation panel
       <div className="panel" style={{ background: "rgba(255,92,53,0.04)", borderColor: "rgba(255,92,53,0.2)" }}>
         <div className="panel-header">
           <div><div className="panel-title">AI Recommendation</div><div className="panel-sub">Based on your weak areas</div></div>
           <span className="tag tag-accent">AI Coach</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          {["OS Concepts — Start with process scheduling basics (1 session)",
+          {[
+            "OS Concepts — Start with process scheduling basics (1 session)",
             "SQL & Databases — Focus on indexing strategies (2 sessions)",
-            "Data Structures — Practice graph traversal problems (1 session)"].map((rec, i) => (
+            "Data Structures — Practice graph traversal problems (1 session)",
+          ].map((rec, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
               <span style={{ color: "var(--accent-2)", fontSize: "0.9rem", flexShrink: 0 }}>→</span>
               <span style={{ fontSize: "0.83rem", color: "var(--text-2)" }}>{rec}</span>
@@ -109,7 +168,7 @@ export default function SkillsPage() {
         <div style={{ marginTop: "1.25rem" }}>
           <button className="resume-action-btn primary">Start Recommended Session</button>
         </div>
-      </div>
+      </div> */}
     </>
   );
 }
