@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import "../style.css";
 import { useRouter } from "next/navigation";
-import { useSpeechToText } from "@/lib/hooks/useSpeechHook";
+import { useSpeechToText } from "@/hooks/useSpeechHook";
 
 // ── Mock chat history ──────────────────────────────────────
 const initialMessages = [
