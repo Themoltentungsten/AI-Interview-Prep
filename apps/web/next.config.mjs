@@ -2,6 +2,7 @@
 const nextConfig = {
   transpilePackages: ["@workspace/ui"],
   output: "standalone",
+  reactStrictMode: false,
   serverExternalPackages: ["@prisma/client", "@prisma/adapter-pg"],
   images: {
     remotePatterns: [

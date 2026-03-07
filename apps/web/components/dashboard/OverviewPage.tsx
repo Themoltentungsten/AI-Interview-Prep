@@ -80,10 +80,7 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
     redirect("/login")
   }
 
-  const handleNewInterview = async (e:React.FormEvent) => {
-    e.preventDefault()
-    setModalOpen(true)
-  }
+  
   return (
     <>
       {/* ── Top bar ── */}
@@ -95,9 +92,7 @@ export default function OverviewPage({ userName, streak, onNavigate }: {
           <div className="dash-date">{dateStr} · {streak}-day streak 🔥</div>
         </div>
         <div className="topbar-actions">
-          <button className="btn-new-session"
-          onClick={(e)=>{handleNewInterview(e)}}
-          >+ New Interview</button>
+          
           <button
             onClick={handleLogout}
             disabled={isLoggingOut}

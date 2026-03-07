@@ -14,5 +14,6 @@ class Settings:
     NEO4J_USERNAME : str = os.getenv("NEO4J_USERNAME", "")
     NEO4J_PASSWORD : str = os.getenv("NEO4J_PASSWORD", "")
     QDRANT_URI : str = os.getenv("QDRANT_URI", "")
+    DATABASE_URL : str = os.getenv("DATABASE_URL", "")
 
 settings = Settings()

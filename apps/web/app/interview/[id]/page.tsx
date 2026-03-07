@@ -1,52 +1,15 @@
 "use client";
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import "../style.css";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSpeechToText } from "@/hooks/useSpeechHook";
+import { getSocket } from "@/ws-client-config/socket";
+import { useInterviewStore } from "@/store/useInterviewStore";
 
-// ── Mock chat history ──────────────────────────────────────
-const initialMessages = [
-  {
-    id: 1,
-    role: "ai" as const,
-    text: "Hello Alex! I'm your AI interviewer today. We'll be doing a system design interview. Are you ready to get started?",
-    time: "2:28 PM",
-  },
-  {
-    id: 2,
-    role: "user" as const,
-    text: "Yes, absolutely! I've been preparing for this. Let's go.",
-    time: "2:29 PM",
-  },
-  {
-    id: 3,
-    role: "ai" as const,
-    text: "Great energy! Here's your question: Design a URL shortening service like Bit.ly. Walk me through your approach — start with requirements gathering.",
-    time: "2:29 PM",
-  },
-  {
-    id: 4,
-    role: "user" as const,
-    text: "Sure. For functional requirements, I'd say we need: shorten a long URL, redirect users to the original URL, and optionally allow custom aliases.",
-    time: "2:31 PM",
-  },
-  {
-    id: 5,
-    role: "ai" as const,
-    text: "Good start! What about non-functional requirements? Think about scale — how many URLs shortened per day, and what's the read/write ratio?",
-    time: "2:32 PM",
-  },
-  {
-    id: 6,
-    role: "user" as const,
-    text: "Let's assume 100M URLs shortened per day. The read to write ratio would be heavily skewed — maybe 100:1 since redirects happen far more than creation.",
-    time: "2:33 PM",
-  },
-];
-
-// ── Timer hook ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// Timer hook
+// ─────────────────────────────────────────────────────────
 function useTimer(running: boolean) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -59,7 +22,9 @@ function useTimer(running: boolean) {
   return `${mm}:${ss}`;
 }
 
-// ── Wave bars (AI speaking indicator) ─────────────────────
+// ─────────────────────────────────────────────────────────
+// Wave bars
+// ─────────────────────────────────────────────────────────
 function WaveBars({ active }: { active: boolean }) {
   return (
     <div className={`wave-bars${active ? " wave-active" : ""}`}>
@@ -70,49 +35,188 @@ function WaveBars({ active }: { active: boolean }) {
   );
 }
 
-// ── Main component ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// Main Interview Page
+// ─────────────────────────────────────────────────────────
 export default function InterviewPage() {
   const router = useRouter();
-  const [messages, setMessages] = useState(initialMessages);
+  const params = useParams();
+  const interviewId = params.id as string;
+
+  // ── UI state ──────────────────────────────────────────
   const [input, setInput] = useState("");
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [sessionRunning, setSessionRunning] = useState(true);
+  const [isEnding, setIsEnding] = useState(false);
+
+  // ── Refs ──────────────────────────────────────────────
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const timer = useTimer(sessionRunning);
   const userVideoRef = useRef<HTMLVideoElement>(null);
   const aiAudioRef = useRef<HTMLAudioElement>(null);
-  const [micPermission, setMicPermission] = useState(false);
-  const [camPermission, setCamPermission] = useState(false);
   const userStreamRef = useRef<MediaStream | null>(null);
-  const reviewRecorderRef = useRef<MediaRecorder | null>(null);
-  const cleanRecorderRef = useRef<MediaRecorder | null>(null);
-  const reviewChunksRef = useRef<BlobPart[]>([]);
-  const cleanChunksRef = useRef<BlobPart[]>([]);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const isRecordingRef = useRef(false);
+  // AudioContext only allows createMediaElementSource once per element
+  const aiSourceCreatedRef = useRef(false);
 
-  const { transcript, isListening, startListening, stopListening } =
+  // ── Media permissions ─────────────────────────────────
+  const [micPermission, setMicPermission] = useState(false);
+  const [camPermission, setCamPermission] = useState(false);
+
+  const timer = useTimer(sessionRunning);
+
+  // ─────────────────────────────────────────────────────
+  // Zustand store — single source of truth for messages
+  // ─────────────────────────────────────────────────────
+  const { currentQuestion, clearCurrentQuestion, addMessage, messages, reset } = useInterviewStore();
+
+  // ─────────────────────────────────────────────────────
+  // endSession — single function for ALL end paths:
+  //   1. User clicks End button
+  //   2. Backend fires interview:complete
+  // Stops recording → triggers file download → redirects
+  // ─────────────────────────────────────────────────────
+  const endSession = useCallback((fromBackend = false) => {
+    if (isEnding) return;
+    setIsEnding(true);
+    setSessionRunning(false);
+    setAiSpeaking(false);
+
+    // Stop recording — onstop handler saves the file
+    if (isRecordingRef.current && recorderRef.current) {
+      recorderRef.current.stop();
+      isRecordingRef.current = false;
+    }
+
+    // Close AudioContext
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    // If user ended manually, notify backend to finalize early
+    if (!fromBackend) {
+      const socket = getSocket();
+      // Store an empty answer so wait_for_answer exits immediately
+      socket.emit("submit_answer", { interviewId, answer: "__END__" });
+    }
+
+    // Persist interview results to Neon (fire and forget)
+    // fromBackend=true means finalize() already ran and summary is in Redis
+    // fromBackend=false means we triggered early via __END__, give Python 2s to finalize
+    const persistDelay = fromBackend ? 0 : 2000;
+    setTimeout(() => {
+      fetch(`http://localhost:4000/api/interview/${interviewId}/complete`, {
+        method: "POST",
+        credentials: "include",
+      }).catch((err) => console.error("[persist] Failed to save to Neon:", err));
+    }, persistDelay);
+
+    // Delay redirect so onstop (file save) fires first
+    setTimeout(() => {
+      reset();
+      router.push(`/feedback/${interviewId}/`);
+    }, 1000);
+  }, [isEnding, interviewId, router, reset]);
+
+  // ─────────────────────────────────────────────────────
+  // playAIAudio — fetches TTS, plays through audio element
+  // The audio element is wired to AudioContext so it gets
+  // captured in the recording automatically
+  // ─────────────────────────────────────────────────────
+  const playAIAudio = useCallback(async (text: string) => {
+    if (!aiAudioRef.current) return;
+    try {
+      setAiSpeaking(true);
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: "alloy" }),
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      aiAudioRef.current.src = url;
+      await aiAudioRef.current.play();
+      aiAudioRef.current.onended = () => {
+        setAiSpeaking(false);
+        URL.revokeObjectURL(url);
+      };
+    } catch (err) {
+      console.error("[TTS] Failed:", err);
+      setAiSpeaking(false);
+    }
+  }, []);
+
+  // ─────────────────────────────────────────────────────
+  // handleQuestion — appends to transcript + plays AI voice
+  // ─────────────────────────────────────────────────────
+  const handleQuestion = useCallback((data: { question: string; time?: number }) => {
+    console.log("[interview] question:", data.question);
+    const now = data.time
+      ? new Date(data.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    addMessage({ id: Date.now(), role: "ai", text: data.question, time: now });
+    playAIAudio(data.question);
+  }, [addMessage, playAIAudio]);
+
+  // ─────────────────────────────────────────────────────
+  // Speech-to-text — fires when user stops speaking:
+  // 1. Append to transcript
+  // 2. Auto-submit to backend (no button press needed)
+  // ─────────────────────────────────────────────────────
+  const { transcript, startListening, stopListening } =
     useSpeechToText((finalText) => {
       if (!finalText.trim()) return;
-      const now = new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now(), role: "user", text: finalText, time: now },
-      ]);
+      const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      addMessage({ id: Date.now(), role: "user", text: finalText, time: now });
+      setInput("");
+      const socket = getSocket();
+      socket.emit("submit_answer", { interviewId, answer: finalText });
+      setAiSpeaking(true); // typing indicator while backend processes
     });
 
-  // ── Stable refs for start/stop to avoid infinite effect loops ──
+  // ─────────────────────────────────────────────────────
+  // Socket setup
+  // ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const socket = getSocket();
+    socket.emit("join_interview", { interviewId });
+
+    // Replay first question stored in waiting room
+    if (currentQuestion) {
+      handleQuestion(currentQuestion);
+      clearCurrentQuestion();
+    }
+
+    socket.on("interview:question", handleQuestion);
+
+    // Backend finished all questions → end session
+    socket.on("interview:complete", () => {
+      endSession(true);
+    });
+
+    return () => {
+      socket.off("interview:question");
+      socket.off("interview:complete");
+    };
+  }, [interviewId, handleQuestion]);
+
+  // ─────────────────────────────────────────────────────
+  // Stable mic refs
+  // ─────────────────────────────────────────────────────
   const startListeningRef = useRef(startListening);
   const stopListeningRef = useRef(stopListening);
   useEffect(() => { startListeningRef.current = startListening; }, [startListening]);
   useEffect(() => { stopListeningRef.current = stopListening; }, [stopListening]);
 
-  // ── 1. Single getUserMedia call ──────────────────────────────
+  // ─────────────────────────────────────────────────────
+  // getUserMedia
+  // ─────────────────────────────────────────────────────
   useEffect(() => {
     const requestMediaAccess = async () => {
       try {
@@ -124,126 +228,111 @@ export default function InterviewPage() {
         setMicPermission(true);
         setCamPermission(true);
       } catch (err) {
-        console.error("Permission denied ❌", err);
+        console.error("[interview] Media denied:", err);
       }
     };
     requestMediaAccess();
-
     return () => {
       userStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  // ── 2. Attach stream to video element ───────────────────────
+  // Attach camera to video element
   useEffect(() => {
     if (userVideoRef.current && userStreamRef.current) {
       userVideoRef.current.srcObject = userStreamRef.current;
     }
   }, [micPermission, camOn]);
 
-  // ── 3. Mirror transcript into text input ────────────────────
+  // Mirror transcript to input box
   useEffect(() => {
     if (transcript) setInput(transcript);
   }, [transcript]);
 
-  // ── 4. Single mic-management effect (no duplicate) ──────────
+  // Pause mic while AI is speaking (prevents feedback loop)
   useEffect(() => {
     if (micOn && !aiSpeaking) {
       startListeningRef.current();
     } else {
       stopListeningRef.current();
     }
-    return () => {
-      stopListeningRef.current();
-    };
+    return () => { stopListeningRef.current(); };
   }, [micOn, aiSpeaking]);
 
-  // ── 5. Recording ─────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────
+  // startRecording — records ONE mixed stream:
+  //
+  //   Video:  user webcam
+  //   Audio:  user mic + AI TTS (both voices in one track)
+  //
+  // How AI voice gets into the recording:
+  //   aiAudioRef.current → createMediaElementSource
+  //     → connect to mixedDest   (captured in webm)
+  //     → connect to destination (heard in speakers)
+  //
+  // File saved to Downloads as:
+  //   interview-{interviewId}-{timestamp}.webm
+  // ─────────────────────────────────────────────────────
   const startRecording = useCallback(() => {
     if (!userStreamRef.current || isRecordingRef.current) return;
-
     try {
       isRecordingRef.current = true;
-
       const stream = userStreamRef.current;
+
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
 
-      const userMicSource = audioContext.createMediaStreamSource(stream);
+      const mixedDest = audioContext.createMediaStreamDestination();
 
-      let aiSource: MediaElementAudioSourceNode | null = null;
-      if (aiAudioRef.current) {
-        aiSource = audioContext.createMediaElementSource(aiAudioRef.current);
+      // User mic → mixed output
+      const micSource = audioContext.createMediaStreamSource(stream);
+      micSource.connect(mixedDest);
+
+      // AI audio → mixed output AND speakers
+      // Only created once due to AudioContext limitation
+      if (aiAudioRef.current && !aiSourceCreatedRef.current) {
+        const aiSource = audioContext.createMediaElementSource(aiAudioRef.current);
+        aiSource.connect(mixedDest);               // → recording
+        aiSource.connect(audioContext.destination); // → speakers
+        aiSourceCreatedRef.current = true;
       }
 
-      const mixedDestination = audioContext.createMediaStreamDestination();
-
-      // ✅ User mic → recording only (prevents echo in ears)
-      userMicSource.connect(mixedDestination);
-
-      // ✅ AI audio → recording + speakers (user must hear AI)
-      if (aiSource) {
-        aiSource.connect(mixedDestination);         // into recording
-        aiSource.connect(audioContext.destination); // into speakers
-      }
-
-      // ✅ Final video has: user video + user mic + AI audio
-      const reviewVideoStream = new MediaStream([
+      // Final stream: user video + mixed audio (user + AI)
+      const mixedStream = new MediaStream([
         ...stream.getVideoTracks(),
-        ...mixedDestination.stream.getAudioTracks(),
+        ...mixedDest.stream.getAudioTracks(),
       ]);
 
-      // ✅ Clean audio = user mic only (for STT / analysis)
-      const cleanAudioStream = new MediaStream(stream.getAudioTracks());
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+        ? "video/webm;codecs=vp9,opus"
+        : "video/webm";
 
-      const reviewRecorder = new MediaRecorder(reviewVideoStream);
-      const cleanRecorder = new MediaRecorder(cleanAudioStream);
+      const recorder = new MediaRecorder(mixedStream, { mimeType });
+      recorderRef.current = recorder;
+      chunksRef.current = [];
 
-      reviewRecorderRef.current = reviewRecorder;
-      cleanRecorderRef.current = cleanRecorder;
-      reviewChunksRef.current = [];
-      cleanChunksRef.current = [];
-
-      reviewRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) reviewChunksRef.current.push(e.data);
-      };
-      cleanRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) cleanChunksRef.current.push(e.data);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      reviewRecorder.onstop = () => {
-        const reviewBlob = new Blob(reviewChunksRef.current, { type: "video/webm" });
-        const url = URL.createObjectURL(reviewBlob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "interview-review.webm";
-        a.click();
-        URL.revokeObjectURL(url);
+      // Triggered when recorder.stop() is called (from endSession)
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const formData = new FormData();
+        formData.append("file", blob, "recording.webm");
+        formData.append("interviewId", interviewId);
+
+        await fetch("/api/save-recording", { method: "POST", body: formData });
+        console.log("[recording] Saved to apps/web/recordings/");
       };
 
-      cleanRecorder.onstop = () => {
-        const cleanBlob = new Blob(cleanChunksRef.current, { type: "audio/webm" });
-        console.log("Clean audio ready", cleanBlob);
-      };
-
-      reviewRecorder.start();
-      cleanRecorder.start();
-    } catch (error) {
-      console.error("Recording failed:", error);
+      recorder.start(1000); // 1s chunks for reliability
+      console.log("[recording] Started — user video + user mic + AI audio");
+    } catch (err) {
+      console.error("[recording] Failed:", err);
       isRecordingRef.current = false;
     }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (!isRecordingRef.current) return;
-    reviewRecorderRef.current?.stop();
-    cleanRecorderRef.current?.stop();
-    isRecordingRef.current = false;
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-  }, []);
+  }, [interviewId]);
 
   useEffect(() => {
     if (micPermission && camPermission && !isRecordingRef.current) {
@@ -251,41 +340,27 @@ export default function InterviewPage() {
     }
   }, [micPermission, camPermission, startRecording]);
 
-  // ── 6. Auto-scroll ───────────────────────────────────────────
+  // Auto-scroll transcript
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── 7. Send message ──────────────────────────────────────────
+  // ─────────────────────────────────────────────────────
+  // sendMessage — manual fallback (user types instead of speaks)
+  // ─────────────────────────────────────────────────────
   const sendMessage = () => {
     const text = input.trim();
     if (!text) return;
-    const now = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
+    addMessage({
+      id: Date.now(),
+      role: "user",
+      text,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     });
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now(), role: "user", text, time: now },
-    ]);
     setInput("");
-
+    const socket = getSocket();
+    socket.emit("submit_answer", { interviewId, answer: text });
     setAiSpeaking(true);
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: "ai",
-          text: "That's a solid point. Now let's talk about the database schema. How would you store the mappings, and which database type would you choose?",
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-      setAiSpeaking(false);
-    }, 2200);
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -330,12 +405,10 @@ export default function InterviewPage() {
             </div>
             <button
               className="btn-end-session"
-              onClick={() => {
-                setSessionRunning(false);
-                stopRecording();
-              }}
+              onClick={() => endSession(false)}
+              disabled={isEnding}
             >
-              End Session
+              {isEnding ? "Ending…" : "End Session"}
             </button>
           </div>
         </header>
@@ -351,6 +424,7 @@ export default function InterviewPage() {
                 <div className="vid-placeholder vid-placeholder-ai">
                   <div className="vid-avatar-ring">
                     <div className="vid-avatar">
+                      {/* Connected to AudioContext for recording AI voice */}
                       <audio ref={aiAudioRef} />
                     </div>
                   </div>
@@ -448,7 +522,11 @@ export default function InterviewPage() {
                 <span>{camOn ? "Camera" : "No cam"}</span>
               </button>
 
-              <button className="ctrl-btn ctrl-btn-end">
+              <button
+                className="ctrl-btn ctrl-btn-end"
+                onClick={() => endSession(false)}
+                disabled={isEnding}
+              >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M6.827 6.175A8 8 0 0117.173 17.173M12 6v6l4 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   <path d="M3.05 11a9 9 0 1017.9 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -526,7 +604,7 @@ export default function InterviewPage() {
             </div>
           </aside>
         </div>
-      </div>  
+      </div>
     </>
   );
 }

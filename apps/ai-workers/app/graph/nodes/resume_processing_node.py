@@ -146,7 +146,6 @@ INSTRUCTIONS:
 - If a section does not exist in the resume, return an empty list [] for that key.
 - Always return all 5 keys: skills, work_experience, education, projects, extracurricular.
 - For 
-
 kills: extract EVERYTHING from "Coursework / Skills", "Technical Skills", or any section listing technologies, languages, tools, frameworks, or concepts.
 - Do not skip tools like Git, GitHub, VS Code, or AI frameworks like LangChain, LangGraph.
 - For work_experience: if no formal jobs exist, return [].

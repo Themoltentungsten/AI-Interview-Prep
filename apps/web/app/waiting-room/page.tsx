@@ -1,12 +1,13 @@
-import { WaitingRoom } from '@/components/dashboard'
-import React from 'react'
+"use client";
 
-function WaitingRoomPage() {
+import { WaitingRoom } from "@/components/dashboard";
+import { Suspense } from "react";
+
+
+export default function WaitingRoomPage() {
   return (
-    <>
-    <WaitingRoom interviewId={'dsfas'} interviewTitle={'asdfas'} interviewType={'adf'} />
-    </>
-  )
+    <Suspense fallback={<div>Loading...</div>}>
+      <WaitingRoom/>
+    </Suspense>
+  );
 }
-
-export default WaitingRoomPage

@@ -8,15 +8,17 @@ import { Server } from "socket.io";
 import http from "http";
 import dotenv from "dotenv";
 import routes from "./routes/resume.routes.js";
-import {  errorMiddleware } from "./middlewares/error.middlewares.js";
+import { errorMiddleware } from "./middlewares/error.middlewares.js";
 import { auth } from "@repo/auth/server";
-import {  toNodeHandler } from "better-auth/node";
+import { toNodeHandler } from "better-auth/node";
 import { prisma } from "@repo/db/prisma-db";
 import "./workers/processResume.workers.js"
+import "./workers/interviewCreation.workers.js"
+import { redisClient } from "./config/redis.config.js";
 
 const app: express.Application = express();
 const server = http.createServer(app);
-const io = new Server(server, {
+export const io = new Server(server, {
   cors: {
     origin: "http://localhost:3000",
     credentials: true
@@ -76,6 +78,14 @@ io.on("connection", (socket) => {
   socket.on("resume_uploaded", (data) => {
     console.log("Resume uploaded:", data);
     socket.emit("resume_processed", { status: "success" });
+  });
+
+  socket.on("join_interview", ({ interviewId }: { interviewId: string }) => {
+    socket.join(`interview:${interviewId}`);
+  });
+
+  socket.on("submit_answer", async ({ interviewId, answer }: { interviewId: string; answer: string }) => {
+    await redisClient.set(`interview:${interviewId}:latest_answer`, answer, "EX", 300);
   });
 
   socket.on("disconnect", () => {

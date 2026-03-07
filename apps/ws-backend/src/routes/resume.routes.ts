@@ -7,5 +7,7 @@ import { authMiddleware } from "../middlewares/error.middlewares.js";
 const router: Router = Router();
 
 router.post("/process-resume",authMiddleware, resumeController.processResume);
-router.post("/store-resume-data",authMiddleware, resumeController.storeResume);
+router.post("/start-interview",authMiddleware, resumeController.startInterview);
+router.get(`/interview/:id/results`,authMiddleware,resumeController.interviewFeedback)
+router.post(`/interview/:id/complete`,authMiddleware,resumeController.storeNeon)
 export default router;

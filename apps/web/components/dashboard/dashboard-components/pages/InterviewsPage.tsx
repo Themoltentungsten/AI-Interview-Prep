@@ -1,25 +1,115 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import CustomSessionModal from "./CustomSessionModal";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const interviewTypes = [
-  { icon: "⬡", name: "System Design",      desc: "Scalable systems — URL shorteners, rate limiters, chat apps.",        tag: "Popular",   tagClass: "tag-accent",  count: "12 sessions done" },
-  { icon: "◈", name: "DSA / Coding",        desc: "Arrays, trees, graphs, DP — full algorithm practice.",                tag: "Daily",     tagClass: "tag-gold",    count: "8 sessions done"  },
-  { icon: "◎", name: "Behavioral",          desc: "STAR-method for leadership, conflict, and culture-fit questions.",    tag: "Suggested", tagClass: "tag-violet",  count: "4 sessions done"  },
-  { icon: "⬕", name: "SQL & Databases",     desc: "Query writing, indexing, normalization and schema design.",           tag: "Weak area", tagClass: "tag-rose",    count: "2 sessions done"  },
-  { icon: "◉", name: "OS & Concurrency",    desc: "Processes, threads, locks, scheduling, memory management.",           tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
-  { icon: "◌", name: "Networking",          desc: "HTTP, TCP/IP, DNS, WebSockets — how the internet works.",             tag: "New",       tagClass: "tag-sky",     count: "1 session done"   },
-  { icon: "◧", name: "Frontend",            desc: "DOM, event loop, React internals, performance, accessibility.",       tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
-  { icon: "◨", name: "Backend & APIs",      desc: "REST, GraphQL, auth, rate limiting, API design patterns.",            tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
-  { icon: "◩", name: "DevOps & Cloud",      desc: "CI/CD, Docker, Kubernetes, AWS basics, deployment pipelines.",        tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
-  { icon: "◪", name: "Machine Coding",      desc: "Build a working feature in 60–90 min — LLD and clean code focus.",   tag: "Popular",   tagClass: "tag-accent",  count: "3 sessions done"  },
-  { icon: "◫", name: "HR Round",            desc: "Salary negotiation, career goals, strengths and weaknesses.",         tag: "Easy win",  tagClass: "tag-gold",    count: "1 session done"   },
-  { icon: "◬", name: "Product Sense",       desc: "Design a product, metrics, trade-offs — for PM-facing engineers.",   tag: "Advanced",  tagClass: "tag-violet",  count: "0 sessions done"  },
-  { icon: "◭", name: "Security Basics",     desc: "XSS, CSRF, SQL injection, HTTPS, OAuth — common security concepts.", tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
-  { icon: "◮", name: "Data Engineering",    desc: "Pipelines, ETL, Spark, Kafka, warehousing basics.",                  tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
-  { icon: "◯", name: "Generative AI",    desc: "RAG, LLMs, Embeddings, Vector Databases.",                  tag: "New",       tagClass: "tag-sky",     count: "0 sessions done"  },
+  {
+    icon: "⬡", name: "System Design",
+    desc: "Scalable systems — URL shorteners, rate limiters, chat apps.",
+    tag: "Popular", tagClass: "tag-accent", count: "12 sessions done",
+    types: ["Architecture", "Scalability", "Trade-offs", "HLD", "LLD"],
+    interviewType: "SYSTEM_DESIGN",
+  },
+  {
+    icon: "◈", name: "DSA / Coding",
+    desc: "Arrays, trees, graphs, DP — full algorithm practice.",
+    tag: "Daily", tagClass: "tag-gold", count: "8 sessions done",
+    types: ["Arrays", "Trees", "Graphs", "DP", "Sorting", "Recursion"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◎", name: "Behavioral",
+    desc: "STAR-method for leadership, conflict, and culture-fit questions.",
+    tag: "Suggested", tagClass: "tag-violet", count: "4 sessions done",
+    types: ["STAR", "Leadership", "Conflict", "Culture-fit"],
+    interviewType: "BEHAVIORAL",
+  },
+  {
+    icon: "⬕", name: "SQL & Databases",
+    desc: "Query writing, indexing, normalization and schema design.",
+    tag: "Weak area", tagClass: "tag-rose", count: "2 sessions done",
+    types: ["Queries", "Indexing", "Schema", "Normalization", "Joins"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◉", name: "OS & Concurrency",
+    desc: "Processes, threads, locks, scheduling, memory management.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["Processes", "Threads", "Mutexes", "Scheduling", "Memory"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◌", name: "Networking",
+    desc: "HTTP, TCP/IP, DNS, WebSockets — how the internet works.",
+    tag: "New", tagClass: "tag-sky", count: "1 session done",
+    types: ["HTTP/HTTPS", "TCP/IP", "DNS", "WebSockets", "TLS"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◧", name: "Frontend",
+    desc: "DOM, event loop, React internals, performance, accessibility.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["DOM", "React", "Event Loop", "Performance", "A11y"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◨", name: "Backend & APIs",
+    desc: "REST, GraphQL, auth, rate limiting, API design patterns.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["REST", "GraphQL", "Auth", "Rate Limiting", "Design"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◩", name: "DevOps & Cloud",
+    desc: "CI/CD, Docker, Kubernetes, AWS basics, deployment pipelines.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["CI/CD", "Docker", "Kubernetes", "AWS", "Pipelines"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◪", name: "Machine Coding",
+    desc: "Build a working feature in 60–90 min — LLD and clean code focus.",
+    tag: "Popular", tagClass: "tag-accent", count: "3 sessions done",
+    types: ["LLD", "Clean Code", "OOP", "Design Patterns", "Live Build"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◫", name: "HR Round",
+    desc: "Salary negotiation, career goals, strengths and weaknesses.",
+    tag: "Easy win", tagClass: "tag-gold", count: "1 session done",
+    types: ["Negotiation", "Career Goals", "Strengths", "Weaknesses"],
+    interviewType: "HR",
+  },
+  {
+    icon: "◬", name: "Product Sense",
+    desc: "Design a product, metrics, trade-offs — for PM-facing engineers.",
+    tag: "Advanced", tagClass: "tag-violet", count: "0 sessions done",
+    types: ["Metrics", "Product Design", "Trade-offs", "GTM"],
+    interviewType: "BEHAVIORAL",
+  },
+  {
+    icon: "◭", name: "Security Basics",
+    desc: "XSS, CSRF, SQL injection, HTTPS, OAuth — common security concepts.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["XSS", "CSRF", "SQLi", "OAuth", "HTTPS"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◮", name: "Data Engineering",
+    desc: "Pipelines, ETL, Spark, Kafka, warehousing basics.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["ETL", "Spark", "Kafka", "Pipelines", "Warehousing"],
+    interviewType: "TECHNICAL",
+  },
+  {
+    icon: "◯", name: "Generative AI",
+    desc: "RAG, LLMs, Embeddings, Vector Databases.",
+    tag: "New", tagClass: "tag-sky", count: "0 sessions done",
+    types: ["RAG", "LLMs", "Embeddings", "Vector DB", "Prompting"],
+    interviewType: "TECHNICAL",
+  },
 ];
 
 const upcomingSessions = [
@@ -28,7 +118,40 @@ const upcomingSessions = [
 ];
 
 export default function InterviewsPage() {
+  const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
+
+  const handleStartInterview = async (
+    e: React.MouseEvent<HTMLButtonElement>,
+    interviewType: string,
+    interviewTitle: string
+  ) => {
+    e.preventDefault();
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/start-interview`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interviewType,  // Send to backend (store in session/DB)
+          interviewTitle
+        }),
+      });
+
+      if (!response.ok) throw new Error('API failed');
+
+      const result = await response.json();
+      console.log(result)
+      const interviewId = result.data.id;
+      
+      // Redirect with params for client-side access
+      router.push(`/waiting-room?type=${encodeURIComponent(interviewType)}&title=${encodeURIComponent(interviewTitle)}&id=${encodeURIComponent(interviewId)}`);
+    } catch (error) {
+      console.error('Start interview failed:', error);
+      // Optional: Show toast/error UI
+    }
+  };
 
   return (
     <>
@@ -50,7 +173,7 @@ export default function InterviewsPage() {
         </div>
         <div className="interview-type-grid">
           {interviewTypes.map((t) => (
-            <button key={t.name} className="interview-type-card" onClick={() => { redirect("/waiting-room") }}>
+            <button key={t.name} className="interview-type-card" onClick={(e) => { handleStartInterview(e, t.interviewType, t.name) }}>
               <span className="interview-type-icon">{t.icon}</span>
               <div className="interview-type-meta">
                 <span className={`tag ${t.tagClass}`}>{t.tag}</span>

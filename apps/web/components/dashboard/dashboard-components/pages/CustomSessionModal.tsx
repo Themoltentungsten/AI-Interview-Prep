@@ -1,5 +1,6 @@
 "use client";
 
+import { redirect } from "next/navigation";
 import { useState } from "react";
 
 type InterviewType = "TECHNICAL" | "HR" | "SYSTEM_DESIGN" | "BEHAVIORAL";
@@ -75,7 +76,6 @@ export default function CustomSessionModal({ isOpen, onClose }: Props) {
   const [jdText, setJdText] = useState("");
   const [jdParsing, setJdParsing] = useState(false);
   const [jdTopics, setJdTopics] = useState<string[]>([]);
-
   if (!isOpen) return null;
 
   const toggleTopic = (t: string) =>
@@ -134,6 +134,8 @@ ${jdText}`,
     if (!canSubmit) return;
     console.log({ title, type, difficulty, questionCount, topics, description, jdText });
     // TODO: call API → createInterview(...) → router.push(`/interview/${id}`)
+    const id = "ldjl"
+    redirect(`/waiting-room?type=${encodeURIComponent(type)}&title=${encodeURIComponent(title)}&id=${encodeURIComponent(id)}`)
     onClose();
   };
 
