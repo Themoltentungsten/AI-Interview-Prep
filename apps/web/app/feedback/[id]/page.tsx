@@ -9,6 +9,7 @@ import {
   CartesianGrid, Tooltip, BarChart, Bar, Cell,
   LineChart, Line, ReferenceLine,
 } from "recharts";
+import { useRouter } from "next/navigation";
 import "../style.css";
 
 /* ─── design tokens ─────────────────────────────────────── */
@@ -192,6 +193,7 @@ function Skeleton() {
 
 /* ─── page ──────────────────────────────────────────────── */
 export default function FeedbackPage() {
+  const router = useRouter()
   const params = useParams();
   const interviewId = params.id as string;
 
@@ -325,8 +327,9 @@ export default function FeedbackPage() {
             <span className="fb-topbar-title">Session Feedback</span>
           </div>
           <div className="fb-topbar-right">
-            <Link href="/dashboard" className="btn-ghost">← Back to Dashboard</Link>
-            <Link href="/interview" className="btn-accent-pill">New Session →</Link>
+            <button 
+            onClick={()=>{router.push("/dashboard")}}
+            className="btn-ghost">← Back to Dashboard</button>
           </div>
         </header>
 
