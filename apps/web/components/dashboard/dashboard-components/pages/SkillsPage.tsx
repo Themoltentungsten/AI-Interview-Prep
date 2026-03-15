@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { getSocket } from "@/ws-client-config/socket";
 
 type Skill = {
   id: string;
@@ -11,29 +12,41 @@ export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchSkills = async () => {
-      try {
-        const res = await fetch("/api/get-skills");
+  const fetchSkills = useCallback(async () => {
+    try {
+      const res = await fetch("/api/get-skills");
 
-        if (!res.ok) {
-          throw new Error("Failed to fetch skills");
-        }
-
-        const data = await res.json();
-        const normalized: Skill[] = Array.isArray(data.data)
-          ? data.data.map((entry: any) => entry.skill)
-          : [];
-        setSkills(normalized);
-      } catch (err) {
-        console.error("Error fetching skills:", err);
-      } finally {
-        setLoading(false);
+      if (!res.ok) {
+        throw new Error("Failed to fetch skills");
       }
-    };
 
-    fetchSkills();
+      const data = await res.json();
+      const normalized: Skill[] = Array.isArray(data.data)
+        ? data.data
+            .filter((entry: any) => entry?.skill)
+            .map((entry: any) => entry.skill)
+        : [];
+      setSkills(normalized);
+    } catch (err) {
+      console.error("Error fetching skills:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchSkills();
+  }, [fetchSkills]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const onProcessed = () => {
+      setLoading(true);
+      fetchSkills();
+    };
+    socket.on("resume_processed", onProcessed);
+    return () => socket.off("resume_processed", onProcessed);
+  }, [fetchSkills]);
 
   // Group skills by category
   const grouped = skills.reduce<Record<string, Skill[]>>((acc, skill) => {
@@ -80,7 +93,7 @@ export default function SkillsPage() {
         <div className="panel-header">
           <div>
             <div className="panel-title">All Skills</div>
-            <div className="panel-sub">Based on your sessions</div>
+            <div className="panel-sub">From your resume</div>
           </div>
         </div>
 

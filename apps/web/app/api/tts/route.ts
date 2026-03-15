@@ -10,14 +10,35 @@ export async function POST(req: NextRequest) {
 
   if (!text) return NextResponse.json({ error: "No text provided" }, { status: 400 });
 
-  const response = await client.audio.speech.create({
-    model: "gpt-4o-mini-tts",
-    voice: voice || "alloy",
-    input: text,
-  });
+  try {
+    // Prefer gpt-4o-mini-tts; fallback to tts-1-hd for compatibility
+    const models = ["gpt-4o-mini-tts", "tts-1-hd"];
+    let lastError: unknown;
 
-  const audioData = Buffer.from(await response.arrayBuffer());
-  return new Response(audioData, {
-    headers: { "Content-Type": "audio/mpeg" },
-  });
+    for (const model of models) {
+      try {
+        const response = await client.audio.speech.create({
+          model,
+          voice: voice || "alloy",
+          input: text,
+        });
+
+        const audioData = Buffer.from(await response.arrayBuffer());
+        return new Response(audioData, {
+          headers: { "Content-Type": "audio/mpeg" },
+        });
+      } catch (err) {
+        lastError = err;
+        continue;
+      }
+    }
+
+    throw lastError;
+  } catch (err) {
+    console.error("[TTS] Error:", err);
+    return NextResponse.json(
+      { error: "Text-to-speech failed. Check OPENAI_API_KEY." },
+      { status: 500 }
+    );
+  }
 }

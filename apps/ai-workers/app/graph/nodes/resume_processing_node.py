@@ -76,22 +76,45 @@ def download_node(state: ResumeProcessState):
 
 def convert_images_node(state: ResumeProcessState):
     """
-    Converts each PDF page to a PNG image using PyMuPDF at 150 DPI.
-    Returns only 'page_images' (or 'error' on failure).
+    For PDF: converts each page to PNG for OCR.
+    For DOCX/DOC: extracts text directly (no OCR needed).
+    Returns 'page_images' (PDF) or 'raw_text' (DOCX).
     """
     print("Convert Image Node Started")
     try:
-        if not state["s3_file_name"].endswith(".pdf"):
-            return {}
+        s3_name = state.get("s3_file_name", "")
+        buffer = state.get("pdf_bytes")
+
+        if not buffer:
+            return {"error": "No file bytes"}
+
+        # DOCX/DOC: extract text directly
+        if s3_name.lower().endswith((".docx", ".doc")):
+            try:
+                import docx
+                doc = docx.Document(buffer)
+                parts = [p.text for p in doc.paragraphs if p.text.strip()]
+                for table in doc.tables:
+                    for row in table.rows:
+                        parts.extend(cell.text.strip() for cell in row.cells if cell.text.strip())
+                raw_text = "\n".join(parts)
+                if not raw_text.strip():
+                    return {"error": "Could not extract text from DOCX"}
+                print("DOCX text preview:", raw_text[:300])
+                return {"raw_text": raw_text}
+            except Exception as e:
+                return {"error": f"DOCX extraction failed: {e}"}
+
+        # PDF: convert to images for OCR
+        if not s3_name.lower().endswith(".pdf"):
+            return {"error": "Unsupported file type"}
 
         images = []
         mat = fitz.Matrix(150/72, 150/72)
-
-        with fitz.open(stream=state["pdf_bytes"], filetype="pdf") as doc:
+        with fitz.open(stream=buffer, filetype="pdf") as doc:
             for page in doc:
                 pix = page.get_pixmap(matrix=mat)
                 images.append(pix.tobytes("png"))
-
         return {"page_images": images}
     except Exception as e:
         return {"error": str(e)}
@@ -99,12 +122,16 @@ def convert_images_node(state: ResumeProcessState):
 
 def ocr_node(state: ResumeProcessState):
     """
-    Sends page images to OpenAI vision for OCR text extraction.
-    Returns only 'raw_text' (or 'error' on failure).
+    Sends page images to OpenAI vision for OCR. Skips if raw_text already set (DOCX path).
     """
     print("OCR Node Started")
     try:
+        if state.get("raw_text"):
+            print("OCR skipped — raw_text already set (DOCX path)")
+            return {}
         page_images = state.get("page_images", [])
+        if not page_images:
+            return {"error": "No page images to OCR"}
         text = ocr_images_with_openai(page_images)
         print("OCR text preview:", text[:300])
         return {"raw_text": text}
@@ -118,9 +145,11 @@ def clean_node(state: ResumeProcessState):
     Returns only 'cleaned_text'.
     """
     print("Clean Node Started")
-    raw = state["raw_text"]
+    raw = state.get("raw_text") or ""
     raw = re.sub(r"```", "", raw)
     cleaned = re.sub(r"\s+", " ", raw).strip()
+    if not cleaned:
+        return {"error": "No text to clean"}
     print("Cleaned preview:", cleaned[:300])
     return {"cleaned_text": cleaned}
 
@@ -145,8 +174,7 @@ INSTRUCTIONS:
 - Return ONLY a valid JSON object. No explanation, no markdown, no backticks.
 - If a section does not exist in the resume, return an empty list [] for that key.
 - Always return all 5 keys: skills, work_experience, education, projects, extracurricular.
-- For 
-kills: extract EVERYTHING from "Coursework / Skills", "Technical Skills", or any section listing technologies, languages, tools, frameworks, or concepts.
+- For skills: extract EVERYTHING from "Coursework / Skills", "Technical Skills", or any section listing technologies, languages, tools, frameworks, or concepts.
 - Do not skip tools like Git, GitHub, VS Code, or AI frameworks like LangChain, LangGraph.
 - For work_experience: if no formal jobs exist, return [].
 - Do not merge separate entries. Each project, role, or activity is its own object.

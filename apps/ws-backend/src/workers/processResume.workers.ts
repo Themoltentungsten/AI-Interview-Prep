@@ -11,12 +11,15 @@ subscriber.on('message', async (channel, message) => {
 
     switch (event_type) {
         case 'neon.store':
-            const result =await storeToDB(payload)
-            if(result?.success){
+            const result = await storeToDB(payload);
+            if (result?.success) {
                 console.log('Resume stored for user:', payload.user_id);
-            }
-            else{
+                const { io } = await import("../index.js");
+                io.emit('resume_processed', { status: 'success', userId: payload.user_id });
+            } else {
                 console.log('Failed to store for user:', payload.user_id);
+                const { io } = await import("../index.js");
+                io.emit('resume_processed', { status: 'error', userId: payload.user_id });
             }
             break;
 

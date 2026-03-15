@@ -498,19 +498,34 @@ export default function InterviewPage() {
     else setShowTabWarning(false);
   }, []);
 
-  /* ---------------------- TTS ---------------------- */
+  /* ---------------------- TTS (queued for reaction + question) ---------------------- */
 
-  const playAIAudio = useCallback(async (text: string) => {
-    if (!aiAudioRef.current || showGate) return;
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingAudioRef = useRef(false);
+
+  const processAudioQueue = useCallback(async () => {
+    if (!aiAudioRef.current || showGate || isPlayingAudioRef.current) return;
+    const next = audioQueueRef.current.shift();
+    if (!next?.trim()) return;
+
+    isPlayingAudioRef.current = true;
+    setAiSpeaking(true);
 
     try {
-      setAiSpeaking(true);
-
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice: "alloy" }),
+        body: JSON.stringify({ text: next.trim(), voice: "alloy" }),
       });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error("[TTS] API error:", res.status, errData);
+        isPlayingAudioRef.current = false;
+        setAiSpeaking(false);
+        processAudioQueue();
+        return;
+      }
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -519,14 +534,27 @@ export default function InterviewPage() {
       await aiAudioRef.current.play();
 
       aiAudioRef.current.onended = () => {
-        setAiSpeaking(false);
         URL.revokeObjectURL(url);
+        isPlayingAudioRef.current = false;
+        setAiSpeaking(false);
+        processAudioQueue();
       };
     } catch (err) {
       console.error("[TTS]", err);
+      isPlayingAudioRef.current = false;
       setAiSpeaking(false);
+      processAudioQueue();
     }
   }, [showGate]);
+
+  const playAIAudio = useCallback(
+    (text: string) => {
+      if (!text?.trim()) return;
+      audioQueueRef.current.push(text);
+      processAudioQueue();
+    },
+    [processAudioQueue],
+  );
 
   /* ---------------------- SOCKET ---------------------- */
 
@@ -562,13 +590,17 @@ export default function InterviewPage() {
 
     const socket = getSocket();
 
+    const onReaction = (data: { text: string }) => {
+      if (data?.text) playAIAudio(data.text);
+    };
     const onQuestion = (data: any) => handleQuestionRef.current(data);
     const onComplete = () => endSessionRef.current(true);
 
-    // ── FIX #5: Remove stale listeners before adding fresh ones ──────────
+    socket.off("interview:reaction", onReaction);
     socket.off("interview:question", onQuestion);
     socket.off("interview:complete", onComplete);
 
+    socket.on("interview:reaction", onReaction);
     socket.on("interview:question", onQuestion);
     socket.on("interview:complete", onComplete);
 
@@ -588,12 +620,12 @@ export default function InterviewPage() {
     socket.on("connect", onReconnect);
 
     return () => {
-      // ── FIX #1: Clean up reconnect listener ─────────────────────────
       socket.off("connect", onReconnect);
+      socket.off("interview:reaction", onReaction);
       socket.off("interview:question", onQuestion);
       socket.off("interview:complete", onComplete);
     };
-  }, [interviewId, showGate]);
+  }, [interviewId, showGate, playAIAudio]);
 
   /* ---------------------- MEDIA PERMISSIONS ---------------------- */
 

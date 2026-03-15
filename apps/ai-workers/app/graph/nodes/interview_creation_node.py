@@ -643,6 +643,25 @@ STRICT RULES:
 # NODE 3: PUBLISH QUESTION
 # ─────────────────────────────────────────────
 
+def _get_interviewer_reaction(state: InterviewState) -> str:
+    """Generate a short, natural reaction based on the last answer — like a real interviewer."""
+    score       = state.get("score", 0)
+    feedback    = state.get("feedback", "")
+    user_answer = (state.get("user_answer") or "").strip()
+    timed_out   = state.get("timeout", False)
+    candidate   = state.get("candidate_name", "the candidate")
+
+    if timed_out or not user_answer:
+        return "No problem at all. Let's move to the next question."
+    if score >= 8:
+        return "Great answer! Really well explained. Let's keep going."
+    if score >= 6:
+        return "Thanks for that. Good point. Next question."
+    if score >= 4:
+        return "Okay, got it. Let's try the next one."
+    return "That's okay — no worries. Let's move on to the next question."
+
+
 def publish_question(state: InterviewState) -> dict:
     print("[publish_question] started")
 
@@ -660,6 +679,18 @@ def publish_question(state: InterviewState) -> dict:
     question          = followup_question if is_followup and followup_question else state.get("current_question", "")
 
     print(f"[publish_question] is_followup={is_followup}, is_support={is_support_turn}, question={question[:80]}...")
+
+    # Publish a short interviewer reaction before the next question (except first Q and support turns)
+    if index > 0 and not is_support_turn:
+        reaction = _get_interviewer_reaction(state)
+        publish_event(
+            f"interview:{interview_id}:events",
+            {
+                "type":   "reaction",
+                "text":   reaction,
+                "time":   int(time.time() * 1000),
+            },
+        )
 
     publish_event(
         f"interview:{interview_id}:events",

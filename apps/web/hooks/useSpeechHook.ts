@@ -35,6 +35,8 @@ export const useSpeechToText = (onFinalMessage?: (text: string) => void) => {
             setIsListening(true);
         };
 
+        const accumulatedRef = { current: "" };
+
         recognition.onresult = (event: any) => {
             let finalChunk = "";
 
@@ -45,19 +47,22 @@ export const useSpeechToText = (onFinalMessage?: (text: string) => void) => {
             }
 
             if (finalChunk) {
-                setTranscript(prev => prev + finalChunk);
+                accumulatedRef.current += finalChunk;
+                setTranscript(accumulatedRef.current);
 
-                // 🟢 Reset silence timer
+                // 🟢 Reset silence timer — allow pauses (4.5s) before submitting
                 if (silenceTimerRef.current) {
                     clearTimeout(silenceTimerRef.current);
                 }
 
                 silenceTimerRef.current = setTimeout(() => {
-                    if (onFinalMessage) {
-                        onFinalMessage(finalChunk.trim());
+                    const toSend = accumulatedRef.current.trim();
+                    accumulatedRef.current = "";
+                    if (onFinalMessage && toSend) {
+                        onFinalMessage(toSend);
                     }
-                    setTranscript(""); // reset after sending
-                }, 2500); // ⏳ 2.5 sec silence
+                    setTranscript("");
+                }, 4500); // ⏳ 4.5 sec silence — allows natural pauses while speaking
             }
         };
 

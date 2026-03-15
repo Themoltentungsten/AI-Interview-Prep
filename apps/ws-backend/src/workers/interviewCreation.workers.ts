@@ -19,6 +19,12 @@ interface QuestionEvent {
     time: number;
 }
 
+interface ReactionEvent {
+    type: "reaction";
+    text: string;
+    time: number;
+}
+
 interface InterviewCompleteEvent {
     type: "interview_complete";
     summary: {
@@ -30,7 +36,7 @@ interface InterviewCompleteEvent {
     };
 }
 
-type InterviewEvent = QuestionEvent | InterviewCompleteEvent;
+type InterviewEvent = QuestionEvent | ReactionEvent | InterviewCompleteEvent;
 
 // -----------------------------
 // PATTERN MESSAGE HANDLER
@@ -66,15 +72,21 @@ subscriber.on("pmessage", async (pattern: string, channel: string, message: stri
         //     so index will be the SAME as the previous question but
         //     current_question will be the follow-up text from evaluate_answer
         // -----------------------------------------------------------------
+        case "reaction": {
+            const { text } = data as ReactionEvent;
+            io.to(`interview:${interviewId}`).emit("interview:reaction", { text });
+            break;
+        }
+
         case "question": {
-            const { index, difficulty, question, time } = data as QuestionEvent;  // add time to interface too
+            const { index, difficulty, question, time } = data as QuestionEvent;
 
             const payload = {
                 interviewId,
-                index,           // ← was "questionNumber", change to "index"
+                index,
                 difficulty,
                 question,
-                time: time ?? Date.now(),  // ← add time
+                time: time ?? Date.now(),
             };
 
             await redisClient.set(

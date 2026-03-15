@@ -1,5 +1,14 @@
 import signal
 import sys
+
+# Force UTF-8 stdout/stderr so emoji in print() never crashes on Windows
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 from app.workers.process_resume_worker import start_worker
 from app.core.config import settings
 
